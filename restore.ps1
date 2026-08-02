@@ -40,7 +40,10 @@ Assert-Admin
 
 $fontRegPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
 $fontValueName = "Segoe UI Emoji (TrueType)"
-$appleFontPath = Join-Path $env:windir "Fonts\AppleColorEmoji-Windows.ttf"
+$appleFontPaths = @(
+    (Join-Path $env:windir "Fonts\AppleColorEmoji-Windows.ttf"),
+    (Join-Path $env:windir "Fonts\AppleColorEmoji-SVG.ttf")
+)
 
 if (-not (Test-Path -LiteralPath $WorkDir)) {
     New-Item -ItemType Directory -Path $WorkDir | Out-Null
@@ -51,7 +54,8 @@ try {
     Write-Log "[INFO] Pointing '$fontValueName' back at seguiemj.ttf"
     New-ItemProperty -Path $fontRegPath -Name $fontValueName -Value "seguiemj.ttf" -PropertyType String -Force | Out-Null
 
-    if (Test-Path -LiteralPath $appleFontPath) {
+    foreach ($appleFontPath in $appleFontPaths) {
+        if (-not (Test-Path -LiteralPath $appleFontPath)) { continue }
         # May still be memory-mapped until reboot; leaving it is harmless once unregistered.
         Remove-Item -LiteralPath $appleFontPath -Force -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $appleFontPath) {
