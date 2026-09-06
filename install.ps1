@@ -91,8 +91,20 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wPa
 
 # Ask a FRESH process which file now backs the family. This process built its
 # own font collection before the change, so asking in-process proves nothing.
+#
+# The child script goes over as -EncodedCommand rather than -Command. Windows
+# PowerShell re-parses a -Command string through native argument splitting,
+# which eats the quotes around "Segoe UI Emoji" and kills the child with "The
+# term 'Segoe' is not recognized"; base64 survives that round trip intact.
+# The child also silences its own error and progress streams instead of the
+# parent redirecting with 2>$null: anything a native command writes to stderr
+# raises a terminating NativeCommandError under $ErrorActionPreference = Stop,
+# and because stdout is captured here, a progress record would be serialized as
+# CLIXML onto stderr and trip exactly that.
 function Get-ActiveEmojiFontFile {
     $probe = @'
+$ErrorActionPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 Add-Type -AssemblyName PresentationCore
 $family = New-Object System.Windows.Media.FontFamily("Segoe UI Emoji")
 foreach ($tf in $family.GetTypefaces()) {
@@ -101,7 +113,8 @@ foreach ($tf in $family.GetTypefaces()) {
 }
 '@
     try {
-        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $probe 2>$null
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
+        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded
         return @($out | Where-Object { $_ })
     }
     catch { return @() }
@@ -258,7 +271,7 @@ try {
     }
 
     # Report what is actually true rather than assuming the activation worked.
-    $active = Get-ActiveEmojiFontFile
+    $active = @(Get-ActiveEmojiFontFile)
     $live = @($active | Where-Object { $_ -match [regex]::Escape($installFontName) })
     if ($live.Count -gt 0) {
         Write-Log "[OK]   'Segoe UI Emoji' now resolves to $installFontName" Green
